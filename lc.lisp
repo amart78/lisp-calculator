@@ -1,7 +1,6 @@
 (defun is-op (chr)
   (member chr '(#\+ #\- #\* #\/ #\^)))
 
-
 (defun extract-highest-op (str)
   ;; returns (operator "left string" "right string")
   (defun extract-parens-op (str)
@@ -75,22 +74,22 @@
     (rec (extract-highest-op str))))
 
 
-(defun compute-bst (root)
+(defun compute-ast (root)
   (cond
    ((eq (first root) #\#)
     (parse-integer (second root)))
    ((eq (first root) #\+)
-    (+ (compute-bst (second root)) (compute-bst (third root))))
+    (+ (compute-ast (second root)) (compute-ast (third root))))
    ((eq (first root) #\-)
-    (- (compute-bst (second root)) (compute-bst (third root))))
+    (- (compute-ast (second root)) (compute-ast (third root))))
    ((eq (first root) #\*)
-    (* (compute-bst (second root)) (compute-bst (third root))))
+    (* (compute-ast (second root)) (compute-ast (third root))))
    ((eq (first root) #\/)
-    (/ (compute-bst (second root)) (compute-bst (third root))))
+    (/ (compute-ast (second root)) (compute-ast (third root))))
    ((eq (first root) #\^)
-    (expt (compute-bst (second root)) (compute-bst (third root))))
+    (expt (compute-ast (second root)) (compute-ast (third root))))
    ((eq (first root) #\()
-    (compute-bst (second root)))))
+    (compute-ast (second root)))))
 
 (defun rebuild-eq (root)
   (cond
@@ -290,18 +289,6 @@
               (cons mainline (append top-block bot-block))))
         aggregate)))))
 
-(print-format-lst (gen-2d-lst (gen-ast "1/2/3*4+5+6")))
-(print-format-lst (gen-2d-lst (gen-ast "1/2+2+3+4+5")))
-(print-format-lst (gen-2d-lst (gen-ast "1/2^1")))
-(print-format-lst (gen-2d-lst (gen-ast "1+1+1+1^1^1^1+1")))
-
-(gen-2d-lst (gen-ast "1/2+6"))
-
-(gen-2d-lst (gen-ast "1/2/3*4+5+6"))
-(gen-2d-lst (gen-ast "1/2/3/3/3/3/3/3"))
-(compute-bst (gen-ast "1/2/3*4+5+6"))
-(compute-bst (gen-ast "1/2/1/2"))
-
 (defun flavor-format-lst (lst)
   (map 'list #'(lambda (x)
                (cond
@@ -312,11 +299,17 @@
                 (t x)))
        lst))
 
-(defun print-format-lst (lst)
+(defun print-format-lst (fn-block)
   (format t "~%")
   (map 'list #'(lambda (x)
-                 (format t "~A~%" (list-to-string (flavor-format-lst x)))) (cdr lst))
+                 (format t "~A~%" (list-to-string (flavor-format-lst x))))
+       fn-block)
   NIL)
+(defun soln-ast (equation)
+  (let* ((ast (gen-ast equation))
+         (lst (gen-2d-lst ast))
+         (full-soln (block-append-at-n (cdr lst) (format NIL "~A~A" " = " (compute-ast ast)) (car lst))))
+    (print-format-lst full-soln)))
 
 (defun gen-2d-lst (root)
   (cond
@@ -338,4 +331,7 @@
       (gen-2d-lst (second root))
       (first root)))))
 
-(print-format-lst (gen-2d-lst (gen-ast "1+2*(3/(2/2^(2+1/2)))")))
+(defun main ()
+  (soln-ast (read-line))
+  (main))
+(main)
