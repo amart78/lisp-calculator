@@ -19,46 +19,46 @@
                         (t str))) ;; empty string
      (t (extract-op str split-pos)))))
 
-  (defun find-first-operator (str)
-    (defmacro next-char ()
-      '(rec (+ 1 index) level strlen))
-    (defmacro next-char-up-level ()
-      '(rec (+ 1 index) (+ 1 level) strlen))
-    (defmacro next-char-down-level ()
-      '(rec (+ 1 index) (- 1 level) strlen))
-    (labels ((rec (index level strlen)
-                  (if (eq index strlen)
-                      (list 99 nil)
-                    (let ((cur-char (char str index)))
-                      (cond
-                       ((eq cur-char #\()
-                        (next-char-up-level)) ;; current char is open paren
-                       ((eq cur-char #\))
-                        (next-char-down-level)) ;; current char is close paren
-                       ((eq level 0)
-                        (let ((retval (next-char)))
-                          (cond
-                           ((not (is-op cur-char))
-                            retval) ;; current char is not operator
-                           ((member cur-char '(#\+ #\-))
-                            (if (< (first retval) 0)
-                                retval
-                              (list 0 index)))
-                           ((member cur-char '(#\*))
-                            (if (< (first retval) 1)
-                                retval
-                              (list 1 index)))
-                           ((member cur-char '(#\/))
-                            (if (< (first retval) 2)
-                                retval
-                              (list 2 index)))
-                           ((member cur-char '(#\^))
-                            (if (< (first retval) 3)
-                                retval
-                              (list 3 index)))
-                           (t retval)))) ; some illegal character
-                       (t (next-char))))))) ;; action cannot be carried out wait for higher priority function
-      (second (rec 0 0 (length str)))))
+(defun find-first-operator (str)
+  (defmacro next-char ()
+    '(rec (+ 1 index) level strlen))
+  (defmacro next-char-up-level ()
+    '(rec (+ 1 index) (+ 1 level) strlen))
+  (defmacro next-char-down-level ()
+    '(rec (+ 1 index) (- 1 level) strlen))
+  (labels ((rec (index level strlen)
+                (if (eq index strlen)
+                    (list 99 nil)
+                  (let ((cur-char (char str index)))
+                    (cond
+                      ((eq cur-char #\()
+                      (next-char-up-level)) ;; current char is open paren
+                      ((eq cur-char #\))
+                      (next-char-down-level)) ;; current char is close paren
+                      ((eq level 0)
+                      (let ((retval (next-char)))
+                        (cond
+                          ((not (is-op cur-char))
+                          retval) ;; current char is not operator
+                          ((member cur-char '(#\+ #\-))
+                          (if (< (first retval) 0)
+                              retval
+                            (list 0 index)))
+                          ((member cur-char '(#\*))
+                          (if (< (first retval) 1)
+                              retval
+                            (list 1 index)))
+                          ((member cur-char '(#\/))
+                          (if (<= (first retval) 2)
+                              retval
+                            (list 2 index)))
+                          ((member cur-char '(#\^))
+                          (if (< (first retval) 3)
+                              retval
+                            (list 3 index)))
+                          (t retval)))) ; some illegal character
+                      (t (next-char))))))) ;; action cannot be carried out wait for higher priority function
+    (second (rec 0 0 (length str)))))
 
 (defun gen-ast (str)
   (labels ((
@@ -139,7 +139,7 @@
     (cons (car lst)
           (map 'list
                #'(lambda (x)
-                   (append x (gen-n-pad (- max-length (list-filtered-length x)) 0)))
+                   (append x (gen-n-pad (- max-length (list-filtered-length x)) #\ )))
                (cdr lst)))))
 
 (defun list-to-string (lst)
@@ -174,19 +174,36 @@
         (mainline-A (car A))
         (lst-A (cdr A)))
     (if (> num-append 0)
-        (cons mainline-A (append (gen-n-pad num-append NIL) lst-A)) ; need to prepend A
-      A)))
+        (cons mainline-A (append lst-A (gen-n-pad num-append NIL))) ; need to append A
+        A)))
 
 (defun list-pad-block-vertical (A B)
+  ;; only provides the correct number of lines padded to itself
   ;; use multiple-value-bind to catch the new blocks new-A new-B
   (let* ((pre-padded-A (list-vertical-prepend A B))
         (pre-padded-B (list-vertical-prepend B A))
         (new-A (list-vertical-append pre-padded-A pre-padded-B))
-        (new-B (list-vertical-append pre-padded-B pre-padded-A))
-        )
+        (new-B (list-vertical-append pre-padded-B pre-padded-A)))
+
+    (format t "A ~A~%" (car A))
+    (print A)
+    (format t "B ~A~%" (car B))
+    (print B)
+    (format t "pre-padded-A ~A~%" (car pre-padded-A))
+    (print pre-padded-A)
+    (format t "pre-padded-A ~A~%" (car pre-padded-B))
+    (print pre-padded-B)
+    (format t "new-A ~A~%" (car new-A))
+    (print new-A)
+    (format t "new-B ~A~%" (car new-B))
+    (print new-B)
     (values
-      (list-pad-block-horizontal new-A new-B)
-      (list-pad-block-horizontal new-B new-A))))
+      (list-pad-block-horizontal new-A)
+      (list-pad-block-horizontal new-B))
+    (values
+     new-A
+     new-B)
+    ))
 
 ;; Operator functions
 ;; blocks are defined as the lists without the mainline in the first position
@@ -227,17 +244,32 @@
       (padded-list-A padded-list-B)
       (list-pad-block-vertical list-A list-B)
     (let* ((mainline
-              (car padded-list-A))
+              (max (car padded-list-A) (car padded-list-B)))
            (left-block
               (block-append-at-n (cdr padded-list-A) operator mainline))
            (right-block
-              (cdr padded-list-B)))
-      (cons mainline (block-mass-append left-block right-block)))))
+            (cdr padded-list-B))
+           (aggregate
+            (cons mainline (block-mass-append left-block right-block))))
+            (format t "mainline-A ~A~%" (car list-A))
+            (print-format-lst list-A)
+            (format t "mainline-B ~A~%" (car list-B))
+            (print-format-lst list-B)
+
+            (format t "mainline-A ~A~%" (car padded-list-A))
+            (print-format-lst padded-list-A)
+            (format t "mainline-B ~A~%" (car padded-list-B))
+            (print-format-lst padded-list-B)
+            (format t "mainline-aggregate ~A~%" (car aggregate))
+            (print-format-lst aggregate)
+            aggregate)))
 
 (defun conjoin-vertical-operator (list-A list-B operator)
   ;; concatenates blocks that utilize vertical concatenation
   ;; calls out to functions that perform the special concatenations
   ;; i.e. / ^
+  (print list-A)
+  (print list-B)
   (cond
    ((eq operator #\^) NIL) ; TODO
    (t
@@ -247,62 +279,63 @@
       (let* ((mainline
               (car padded-list-A))
              (top-block
-              (block-surround-at-n (cdr padded-list-A) 'U 'N mainline))
+              (block-surround-at-n (cdr padded-list-A) 'U 'N (- (length (cdr padded-list-A)) 1)))
              (bot-block
-              (cdr padded-list-B)))
-        (cons
-         mainline
-         (append top-block bot-block)))))) ; it would be stupid if somehow the mainline wasn't the bottom of the top
-  )
+              (cdr padded-list-B))
+             (aggregate
+              (cons mainline (append top-block bot-block))))
+        (format t "mainline-A ~A~%" (car list-A))
+        (print-format-lst list-A)
+        (format t "mainline-B ~A~%" (car list-B))
+        (print-format-lst list-B)
 
-(gen-ast "1/(2/3*4+5)+6")
+        (format t "mainline-A ~A~%" (car padded-list-A))
+        (print-format-lst padded-list-A)
+        (format t "mainline-B ~A~%" (car padded-list-B))
+        (print-format-lst padded-list-B)
+        (format t "mainline-aggregate ~A~%" (car aggregate))
+        (print-format-lst aggregate)
+        aggregate)))))
 
-#|
-;; testing char-is-digit
-(and
- (char-is-digit #\0)
- (char-is-digit #\1)
- (char-is-digit #\2)
- (char-is-digit #\3)
- (char-is-digit #\4)
- (char-is-digit #\5)
- (char-is-digit #\6)
- (char-is-digit #\7)
- (char-is-digit #\8)
- (char-is-digit #\9))
-;; testing str-is-digit
-(str-is-digit "12345")
-(and
- (str-is-digit "1+1")
- (str-is-digit "deadbeef"))
+(print-format-lst (gen-2d-lst (gen-ast "1/2/3*4+5+6")))
+(print-format-lst (gen-2d-lst (gen-ast "1/2+2+3+4+5")))
 
-(extract-highest-op "1/1*1*1")
-(extract-highest-op "1/1")
-(extract-highest-op "1")
-(find-first-operator "1/1*1+1")
-(gen-ast "1/(1+2/2)*1*1")
+(gen-2d-lst (gen-ast "1/2+6"))
 
-(split-string "(1/1*1+1)")
+(gen-2d-lst (gen-ast "1/2/3*4+5+6"))
+(gen-2d-lst (gen-ast "1/2/3/3/3/3/3/3"))
+(compute-bst (gen-ast "1/2/3*4+5+6"))
+(compute-bst (gen-ast "1/2/1/2"))
 
-(find-first-operator "1/(1+1+2)*2*2*2*2")
-(gen-ast "1/(2/3*4+5)+6")
-(rebuild-eq (gen-ast "1/(2/3*4+5)+6"))
-(rebuild-eq (gen-ast "(1/1)+2/3*4+5+6"))
-(rebuild-eq (gen-ast "1/6"))
-(compute-bst (gen-ast "1/6+1"))
-(compute-bst (gen-ast "6/6+1"))
-(compute-bst (gen-ast "(1/1)+2/3*4+5+6"))
+(defun flavor-format-lst (lst)
+  (map 'list #'(lambda (x)
+               (cond
+                ((eq x 'U) "")
+                ((eq x 'N) "")
+                (t x)))
+       lst))
 
-(gen-n-pad 10 '())
-(list-pad-block-length '(1 (1 2) (1 2) (1 2 3 4)))
-(list-vertical-prepend '(1 (1 2) (1 2) (1 2 3 4)) '(3 (1 2) (1) (1) (1)))
+(defun print-format-lst (lst)
+  (format t "~%")
+  (map 'list #'(lambda (x)
+                 (format t "~A~%" (list-to-string (flavor-format-lst x)))) (cdr lst))
+  NIL)
 
-(list-pad-block-vertical '(1 (1 2) (1 2) (1 2 3 4)) '(3 (1 2) (1) (1) (1)))
+(defun gen-2d-lst (root)
+  (cond
+   ((null root))
+   ((eq (first root) #\#)
+    (list 0 (string-to-list (second root))))
+   ((eq (first root) #\() ; TODO handle parentheses
+    (gen-2d-lst (second root)))
+   ((member (first root) '(#\+ #\- #\*)) ; TODO
+    (conjoin-horizontal-operator
+      (gen-2d (second root))
+      (gen-2d (third root))
+      (first root)))
+   ((member (first root) '(#\/ #\^))
+    (conjoin-vertical-operator
+     (gen-2d (second root))
+     (gen-2d (third root))
+     (first root)))))
 
-(block-mass-append (list-pad-block-vertical '(3 (0 0 0 0) (0 0 0 0) (1 2 0 0) (1 2 0 0) (1 2 3 4)) '(3 (0 0) (1 2) (1 0) (1 0) (1 0))))
-(block-mass-append '((0 0 0 0) (0 0 0 0) (1 2 0 0) (1 2 0 0) (1 2 3 4)) '((0 0 0 0) (1 2 0 0) (1 0 0 0) (1 0 0 0) (1 0 0 0)))
-(block-append-at-n '((0 0 0 0) (0 0 0 0) (1 2 0 0) (1 2 0 0) (1 2 3 4)) #\k 3)
-(conjoin-vertical-operator '(1 (1 2) (1 2) (1 2 3 4)) '(3 (1 2) (1) (1) (1)) #\/)
-(conjoin-horizontal-operator '(1 (1 2) (1 2) (1 2 3 4)) '(3 (1 2) (1) (1) (1)) #\+)
-#|
-|#
