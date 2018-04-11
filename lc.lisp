@@ -1,24 +1,24 @@
 (defun is-op (chr)
-  (member chr '(#\+ #\- #\* #\/ #\/^)))
+  (member chr '(#\+ #\- #\* #\/ #\^)))
 
 
-(defun gen-ast (str)
-  (defun extract-highest-op (str)
-    ;; returns (operator "left string" "right string")
-    (defun extract-parens-op (str)
-      (subseq str 1 (- (length str) 1 )))
-    (defun split-string (str midpoint)
-      (subseq str midpoint) (subseq str midpoint (length str)))
-    (defun extract-op (str midpoint)
-      (list (char str midpoint) (subseq str 0 midpoint) (subseq str (+ 1 midpoint))))
-    (let ((split-pos (find-first-operator str)))
-      (cond
-       ((null split-pos) (cond
-                          ((and t (eq (char str 0) #\())
-                           (list #\( (extract-parens-op str) NIL)) ; if the first character is a ( so we can extract it
-                          ((str-is-digit str) (list #\# str NIL)) ; returns (#\( inner-str)
-                          (t str))) ;; empty string
-       (t (extract-op str split-pos)))))
+(defun extract-highest-op (str)
+  ;; returns (operator "left string" "right string")
+  (defun extract-parens-op (str)
+    (subseq str 1 (- (length str) 1 )))
+  (defun split-string (str midpoint)
+    (subseq str midpoint) (subseq str midpoint (length str)))
+  (defun extract-op (str midpoint)
+    (list (char str midpoint) (subseq str 0 midpoint) (subseq str (+ 1 midpoint))))
+  (let ((split-pos (find-first-operator str)))
+    (cond
+     ((null split-pos) (cond
+                        ((and t (eq (char str 0) #\())
+                         (list #\( (extract-parens-op str) NIL)) ; if the first character is a ( so we can extract it
+                        ((str-is-digit str) (list #\# str NIL)) ; returns (#\( inner-str)
+                        (t str))) ;; empty string
+     (t (extract-op str split-pos)))))
+
   (defun find-first-operator (str)
     (defmacro next-char ()
       '(rec (+ 1 index) level strlen))
@@ -59,6 +59,8 @@
                            (t retval)))) ; some illegal character
                        (t (next-char))))))) ;; action cannot be carried out wait for higher priority function
       (second (rec 0 0 (length str)))))
+
+(defun gen-ast (str)
   (labels ((
             ;; returns tree of operators '(#\operator '(left subtree) '(right subtree))
             rec (root)
@@ -130,10 +132,21 @@
 (defun gen-n-pad (n value)
   (make-list n :initial-element value))
 
-(defun list-pad-block-horizontal (lst)
-  (let ((max-length (max-list-length (cdr lst))))
+(defun list-pad-block-horizontal (lst &optional (lst-B NIL))
+  (let ((max-length (max
+         (max-list-length (cdr lst))
+         (max-list-length (cdr lst-B)))))
     (cons (car lst)
-          (map 'list #'(lambda (x) (append x (gen-n-pad (- max-length (list-filtered-length x)) 0))) (cdr lst)))))
+          (map 'list
+               #'(lambda (x)
+                   (append x (gen-n-pad (- max-length (list-filtered-length x)) 0)))
+               (cdr lst)))))
+
+(defun list-to-string (lst)
+  (format nil "~{~A~}" lst))
+
+(defun string-to-list (str)
+  (coerce str 'list))
 
 (defun list-get-number-vertical-prepend (A B)
   ;; prepend A by B's excess rows
@@ -172,15 +185,77 @@
         (new-B (list-vertical-append pre-padded-B pre-padded-A))
         )
     (values
-      (list-pad-block-horizontal new-A)
-      (list-pad-block-horizontal new-B))))
+      (list-pad-block-horizontal new-A new-B)
+      (list-pad-block-horizontal new-B new-A))))
 
+;; Operator functions
+;; blocks are defined as the lists without the mainline in the first position
 
-(gen-n-pad 10 '())
-(list-pad-block-length '(1 (1 2) (1 2) (1 2 3 4)))
-(list-vertical-prepend '(1 (1 2) (1 2) (1 2 3 4)) '(3 (1 2) (1) (1) (1)))
+(defun block-mass-append (block-A block-B)
+  (map 'list #'append block-A block-B))
 
-(list-pad-block-vertical '(1 (1 2) (1 2) (1 2 3 4)) '(3 (1 2) (1) (1) (1)))
+(defun block-append-at-n (block-A operator n)
+  (labels ((
+      rec (acc x)
+          (cond
+           ((null x) (reverse acc))
+           ((eq n (length acc))
+            (rec (cons (append (car x) (cons operator nil)) acc) (cdr x)))
+           (t (rec (cons (car x) acc) (cdr x))))))
+    (cdr (list-pad-block-horizontal (cons NIL (rec NIL block-A))))))
+
+(defun block-surround-at-n (block-A prefix suffix n)
+  (labels ((
+            rec (acc x)
+                (cond
+                 ((null x) (reverse acc))
+                 ((eq n (length acc))
+                  (rec
+                   (cons (append (cons prefix nil) (car x) (cons suffix nil)) acc) (cdr x)))
+                 (t (rec (cons (car x) acc) (cdr x))))))
+    (cdr (list-pad-block-horizontal (cons NIL (rec NIL block-A))))))
+
+(defun conjoin-inline-operator (list-A list-B operator)
+  ;; concatenates blocks that use inlined operators
+  ;; i.e. ()
+  )
+
+(defun conjoin-horizontal-operator (list-A list-B operator)
+  ;; concatenates blocks that utilize horizontal concatenation
+  ;; i.e. + - *
+  (multiple-value-bind
+      (padded-list-A padded-list-B)
+      (list-pad-block-vertical list-A list-B)
+    (let* ((mainline
+              (car padded-list-A))
+           (left-block
+              (block-append-at-n (cdr padded-list-A) operator mainline))
+           (right-block
+              (cdr padded-list-B)))
+      (cons mainline (block-mass-append left-block right-block)))))
+
+(defun conjoin-vertical-operator (list-A list-B operator)
+  ;; concatenates blocks that utilize vertical concatenation
+  ;; calls out to functions that perform the special concatenations
+  ;; i.e. / ^
+  (cond
+   ((eq operator #\^) NIL) ; TODO
+   (t
+    (let
+        ((padded-list-A (list-pad-block-horizontal list-A list-B))
+         (padded-list-B (list-pad-block-horizontal list-B list-A)))
+      (let* ((mainline
+              (car padded-list-A))
+             (top-block
+              (block-surround-at-n (cdr padded-list-A) 'U 'N mainline))
+             (bot-block
+              (cdr padded-list-B)))
+        (cons
+         mainline
+         (append top-block bot-block)))))) ; it would be stupid if somehow the mainline wasn't the bottom of the top
+  )
+
+(gen-ast "1/(2/3*4+5)+6")
 
 #|
 ;; testing char-is-digit
@@ -217,5 +292,17 @@
 (compute-bst (gen-ast "1/6+1"))
 (compute-bst (gen-ast "6/6+1"))
 (compute-bst (gen-ast "(1/1)+2/3*4+5+6"))
+
+(gen-n-pad 10 '())
+(list-pad-block-length '(1 (1 2) (1 2) (1 2 3 4)))
+(list-vertical-prepend '(1 (1 2) (1 2) (1 2 3 4)) '(3 (1 2) (1) (1) (1)))
+
+(list-pad-block-vertical '(1 (1 2) (1 2) (1 2 3 4)) '(3 (1 2) (1) (1) (1)))
+
+(block-mass-append (list-pad-block-vertical '(3 (0 0 0 0) (0 0 0 0) (1 2 0 0) (1 2 0 0) (1 2 3 4)) '(3 (0 0) (1 2) (1 0) (1 0) (1 0))))
+(block-mass-append '((0 0 0 0) (0 0 0 0) (1 2 0 0) (1 2 0 0) (1 2 3 4)) '((0 0 0 0) (1 2 0 0) (1 0 0 0) (1 0 0 0) (1 0 0 0)))
+(block-append-at-n '((0 0 0 0) (0 0 0 0) (1 2 0 0) (1 2 0 0) (1 2 3 4)) #\k 3)
+(conjoin-vertical-operator '(1 (1 2) (1 2) (1 2 3 4)) '(3 (1 2) (1) (1) (1)) #\/)
+(conjoin-horizontal-operator '(1 (1 2) (1 2) (1 2 3 4)) '(3 (1 2) (1) (1) (1)) #\+)
 #|
 |#
