@@ -139,16 +139,16 @@
     (cons (car lst)
           (map 'list
                #'(lambda (x)
-                   (append x (gen-n-pad (- max-length (list-filtered-length x)) #\+)))
+                   (append x (gen-n-pad (- max-length (list-filtered-length x)) #\ )))
                (cdr lst)))))
 
 (defun list-prepad-block-horizontal (lst-A lst-B)
   (let ((max-length 
-            (+ 1 (max-list-length (cdr lst-B)))))
+            (max-list-length (cdr lst-B))))
     (cons (car lst-A)
           (map 'list
                #'(lambda (x)
-                   (append (gen-n-pad max-length #\-) x))
+                   (append (gen-n-pad max-length #\ ) x))
                (cdr lst-A)))))
 ;;(list-prepad-block-horizontal '(0 (1 2 3 4) (1 2 3 4)) '(0 (1 2) (1 2)))
 
@@ -220,19 +220,28 @@
 
 (defun block-surround-at-n (block-A prefix suffix n)
   (labels ((
-            rec (acc x)
+            rec (acc lines)
                 (cond
-                 ((null x) (reverse acc))
+                 ((null lines) (reverse acc))
                  ((eq n (length acc))
                   (rec
-                   (cons (append (cons prefix nil) (car x) (cons suffix nil)) acc) (cdr x)))
-                 (t (rec (cons (car x) acc) (cdr x))))))
+                   (cons (append (cons prefix nil) (car lines) (cons suffix nil)) acc) (cdr lines)))
+                 (t
+                  (rec
+                   (cons (append (cons #\  NIL) (car lines) (cons #\  NIL)) acc)
+                   (cdr lines))))))
     (cdr (list-pad-block-horizontal (cons NIL (rec NIL block-A))))))
 
-(defun conjoin-inline-operator (list-A list-B operator)
+(defun conjoin-inline-operator (list-A operator)
   ;; concatenates blocks that use inlined operators
   ;; i.e. ()
-  )
+  (let* ((mainline
+          (car list-A))
+         (new-block
+          (block-surround-at-n (cdr list-A) #\( #\) mainline))
+         (aggregate
+          (cons mainline new-block)))
+    aggregate))
 
 (defun conjoin-horizontal-operator (list-A list-B operator)
   ;; concatenates blocks that utilize horizontal concatenation
@@ -286,6 +295,7 @@
 
 (print-format-lst (gen-2d-lst (gen-ast "1/2/3*4+5+6")))
 (print-format-lst (gen-2d-lst (gen-ast "1/2+2+3+4+5")))
+(print-format-lst (gen-2d-lst (gen-ast "1/2^1")))
 (print-format-lst (gen-2d-lst (gen-ast "1+1+1+1^1^1^1+1")))
 
 (gen-2d-lst (gen-ast "1/2+6"))
@@ -314,16 +324,20 @@
    ((null root))
    ((eq (first root) #\#)
     (list 0 (string-to-list (second root))))
-   ((eq (first root) #\() ; TODO handle parentheses
-    (gen-2d-lst (second root)))
-   ((member (first root) '(#\+ #\- #\*)) ; TODO
+   ((member (first root) '(#\+ #\- #\*))
     (conjoin-horizontal-operator
-      (gen-2d (second root))
-      (gen-2d (third root))
+      (gen-2d-lst (second root))
+      (gen-2d-lst (third root))
       (first root)))
    ((member (first root) '(#\/ #\^))
     (conjoin-vertical-operator
-     (gen-2d (second root))
-     (gen-2d (third root))
-     (first root)))))
+     (gen-2d-lst (second root))
+     (gen-2d-lst (third root))
+     (first root)))
+  ((member (first root) '(#\()) ; TODO
+   (print root)
+    (conjoin-inline-operator
+      (gen-2d-lst (second root))
+      (first root)))))
 
+(print-format-lst (gen-2d-lst (gen-ast "1+2*(3/(2/2))")))
