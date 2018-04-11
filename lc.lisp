@@ -1,94 +1,77 @@
 (defun is-op (chr)
-  (member chr '(#\+ #\- #\* #\/)))
+  (member chr '(#\+ #\- #\* #\/ #\/^)))
 
-(defun find-first-operator (str)
-  (defmacro next-char ()
-    '(rec (+ 1 index) level strlen))
-  (defmacro next-char-up-level ()
-    '(rec (+ 1 index) (+ 1 level) strlen))
-  (defmacro next-char-down-level ()
-    '(rec (+ 1 index) (- 1 level) strlen))
-  (labels ((rec (index level strlen)
-              (let ((cur-char (char str index)))
-                (cond
-                 ((eq index strlen)
-                  (list 99 nil)) ; TODO make more elegant value to return
-                 ((eq cur-char #\()
-                  (next-char-up-level)) ;; current char is open paren
-                 ((eq cur-char #\))
-                  (next-char-down-level)) ;; current char is close paren
-                 ((eq level 0)
-                      (cond
-                       ((not (is-op cur-char))
-                        (next-char)) ;; current char is not operator
-                       ((member cur-char '(#\+ #\-))
-                        (list 0 index)) ;; current char is an additive character terminate early (priority index)
-                       ((member cur-char '(#\*))
-                        (let ((retval (next-char)))
-                          (if (< (first retval) 1)
-                              retval
-                              (list 1 index))))
-                       ((member cur-char '(#\/))
-                        (let ((retval (next-char)))
-                          (if (< (first retval) 2)
-                              retval
-                            (list 2 index))))
-                       ((member cur-char '(#\^))
-                        (let ((retval (next-char)))
-                          (if (< (first retval) 3)
-                              retval
-                            (list 3 index))))
-                       (t (next-char)))) ; unnecessary?
-                 (t (next-char)))))) ;; action cannot be carried out wait for higher priority function
-    (second (rec 0 0 (length str)))))
-
-(find-first-operator "1/(1+1+2)*2*2*2*2")
-
-(defun extract-parens-op (str)
-  (subseq str 1 (- (length str) 1 )))
-
-(defun split-string (str midpoint)
-  (subseq str midpoint) (subseq str midpoint (length str)))
-
-(defun extract-op (str midpoint)
-  (list (char str midpoint) (subseq str 0 midpoint) (subseq str (+ 1 midpoint))))
-
-(defun extract-highest-op (str)
-  (let ((split-pos (find-first-operator str)))
-    (cond
-     ((null split-pos) (cond
-                        ((and t (eq (char str 0) #\())
-                         (list #\( (extract-parens-op str) NIL)) ; if the first character is a ( so we can extract it
-                        ((str-is-digit str) (list #\# str NIL)) ; returns (#\( inner-str)
-                        (t str))) ;; empty string
-     (t (extract-op str split-pos)))))
-;; returns (operator "left string" "right string")
 
 (defun gen-ast (str)
-  (labels (
-           (rec (root)
+  (defun extract-highest-op (str)
+    ;; returns (operator "left string" "right string")
+    (defun extract-parens-op (str)
+      (subseq str 1 (- (length str) 1 )))
+    (defun split-string (str midpoint)
+      (subseq str midpoint) (subseq str midpoint (length str)))
+    (defun extract-op (str midpoint)
+      (list (char str midpoint) (subseq str 0 midpoint) (subseq str (+ 1 midpoint))))
+    (let ((split-pos (find-first-operator str)))
+      (cond
+       ((null split-pos) (cond
+                          ((and t (eq (char str 0) #\())
+                           (list #\( (extract-parens-op str) NIL)) ; if the first character is a ( so we can extract it
+                          ((str-is-digit str) (list #\# str NIL)) ; returns (#\( inner-str)
+                          (t str))) ;; empty string
+       (t (extract-op str split-pos)))))
+  (defun find-first-operator (str)
+    (defmacro next-char ()
+      '(rec (+ 1 index) level strlen))
+    (defmacro next-char-up-level ()
+      '(rec (+ 1 index) (+ 1 level) strlen))
+    (defmacro next-char-down-level ()
+      '(rec (+ 1 index) (- 1 level) strlen))
+    (labels ((rec (index level strlen)
+                  (if (eq index strlen)
+                      (list 99 nil)
+                    (let ((cur-char (char str index)))
+                      (cond
+                       ((eq cur-char #\()
+                        (next-char-up-level)) ;; current char is open paren
+                       ((eq cur-char #\))
+                        (next-char-down-level)) ;; current char is close paren
+                       ((eq level 0)
+                        (let ((retval (next-char)))
+                          (cond
+                           ((not (is-op cur-char))
+                            retval) ;; current char is not operator
+                           ((member cur-char '(#\+ #\-))
+                            (if (< (first retval) 0)
+                                retval
+                              (list 0 index)))
+                           ((member cur-char '(#\*))
+                            (if (< (first retval) 1)
+                                retval
+                              (list 1 index)))
+                           ((member cur-char '(#\/))
+                            (if (< (first retval) 2)
+                                retval
+                              (list 2 index)))
+                           ((member cur-char '(#\^))
+                            (if (< (first retval) 3)
+                                retval
+                              (list 3 index)))
+                           (t retval)))) ; some illegal character
+                       (t (next-char))))))) ;; action cannot be carried out wait for higher priority function
+      (second (rec 0 0 (length str)))))
+  (labels ((
+            ;; returns tree of operators '(#\operator '(left subtree) '(right subtree))
+            rec (root)
                 (cond
                  ((eq (first root) #\#) root)
                  (t
                   (list (first root)
                         (if (second root)
-                          (rec (extract-highest-op (second root))))
+                            (rec (extract-highest-op (second root))))
                         (if (third root)
-                          (rec (extract-highest-op (third root)))))))))
+                            (rec (extract-highest-op (third root)))))))))
     (rec (extract-highest-op str))))
-;; returns tree of operators '(#\operator '(left subtree) '(right subtree))
 
-(gen-ast "1/(1+2/2)*1*1")
-
-(split-string "(1/1*1+1)")
-
-(gen-ast "1/(2/3*4+5)+6")
-(rebuild-eq (gen-ast "1/(2/3*4+5)+6"))
-(rebuild-eq (gen-ast "(1/1)+2/3*4+5+6"))
-(rebuild-eq (gen-ast "1/6"))
-(compute-bst (gen-ast "1/6+1"))
-(compute-bst (gen-ast "6/6+1"))
-(compute-bst (gen-ast "(1/1)+2/3*4+5+6"))
 
 (defun compute-bst (root)
   (cond
@@ -129,6 +112,53 @@
             (and acc (char-is-digit x)))
           str :initial-value t))
 
+;; conversion process
+;; our convention will be (mainline-level (line) (line) (line))
+
+(defun list-filtered-length (lst)
+  (reduce #'(lambda (acc elem)
+              (if (symbolp elem) acc (+ acc 1))) lst :initial-value 0))
+
+(list-filtered-length '(3 6 9 12 k))
+
+(defun max-list-length (lst)
+  (reduce #'(lambda (acc cur)
+              (max (list-filtered-length cur) acc)) lst :initial-value 0))
+
+(max-list-length '((1 2) (2) (1) (1 2 3 4)))
+
+(defun gen-n-pad (n value)
+  (make-list n :initial-element value))
+
+(defun list-pad-block-length (lst)
+  (let ((max-length (max-list-length (cdr lst))))
+    (cons (car lst)
+          (map 'list #'(lambda (x) (append x (gen-n-pad (- max-length (list-filtered-length x)) 0))) (cdr lst)))))
+
+(defun list-get-number-vertical-prepend (A B)
+  ;; prepend A by B's excess rows
+  ;; if positive A requires prepend
+  ;; else B requires prepend
+  (- (first B) (first A)))
+
+(defun list-vertical-prepend (A B)
+  (let ((num-prepend (list-get-number-vertical-prepend A B))
+        (mainline-A (car A))
+        (lst-A (cdr A)))
+    (if (> num-prepend 0)
+      (list-pad-block-length (cons mainline-A (append (gen-n-pad num-prepend NIL) lst-A))) ; need to prepend A
+      A)))
+
+
+(defun list-get-number-rows-append (lst-1 lst-2))
+
+(defun list-pad-blocks-height (lst-1 lst-2)
+  )
+
+(gen-n-pad 10 '())
+(list-pad-block-length '(1 (1 2) (1 2) (1 2 3 4)))
+(list-vertical-prepend '(1 (1 2) (1 2) (1 2 3 4)) '(3 (1 2) (1) (1) (1)))
+
 #|
 ;; testing char-is-digit
 (and
@@ -152,5 +182,17 @@
 (extract-highest-op "1/1")
 (extract-highest-op "1")
 (find-first-operator "1/1*1+1")
+(gen-ast "1/(1+2/2)*1*1")
+
+(split-string "(1/1*1+1)")
+
+(find-first-operator "1/(1+1+2)*2*2*2*2")
+(gen-ast "1/(2/3*4+5)+6")
+(rebuild-eq (gen-ast "1/(2/3*4+5)+6"))
+(rebuild-eq (gen-ast "(1/1)+2/3*4+5+6"))
+(rebuild-eq (gen-ast "1/6"))
+(compute-bst (gen-ast "1/6+1"))
+(compute-bst (gen-ast "6/6+1"))
+(compute-bst (gen-ast "(1/1)+2/3*4+5+6"))
 #|
 |#
