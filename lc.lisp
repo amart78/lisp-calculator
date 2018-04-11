@@ -1,14 +1,4 @@
 (setq *symbols* '(#\+ #\- #\* #\/))
-(defun gen-ast (str)
-  (cond
-   ((eql "" str) nil)
-   ((is-digit str) (str-to-num str))
-   (t (let ((op-l-r-list (split-at-first-operator str)))
-        (let
-            ((op (first op-l-r-list))
-             (left (second op-l-r-list))
-             (right (third op-l-r-list)))
-          '(op (gen-ast left) (gen-ast right)))))))
 
 (defun find-first-operator (str)
   (defmacro next-char ()
@@ -21,9 +11,9 @@
                 (cond
                  ((eq index strlen)
                   (list 99 nil)) ; TODO make more elegant value to return
-                 ((eq (char str index) #\))
-                  (next-char-up-level)) ;; current char is open paren
                  ((eq (char str index) #\()
+                  (next-char-up-level)) ;; current char is open paren
+                 ((eq (char str index) #\))
                   (next-char-down-level)) ;; current char is close paren
                  ((eq level 0)
                       (cond
@@ -33,19 +23,16 @@
                         (list 0 index)) ;; current char is an additive character terminate early (priority index)
                        ((member (char str index) '(#\*))
                         (let ((retval (next-char)))
-                          (print retval)
                           (if (< (first retval) 1)
                               retval
                               (list 1 index))))
                        ((member (char str index) '(#\/))
                         (let ((retval (next-char)))
-                          (print retval)
                           (if (< (first retval) 2)
                               retval
                             (list 2 index))))
                        ((member (char str index) '(#\^))
                         (let ((retval (next-char)))
-                          (print retval)
                           (if (< (first retval) 3)
                               retval
                             (list 3 index))))
@@ -55,8 +42,9 @@
     (second (rec 0 0 (length str)))))
 
 (find-first-operator "1/(1+1+2)*2*2*2*2")
-(defmacro extract-parens-op (str)
-  (subseq 1 (- (length str) 1 )))
+
+(defun extract-parens-op (str)
+  (subseq str 1 (- (length str) 1 )))
 
 (defun split-string (str midpoint)
   (subseq str midpoint) (subseq str midpoint (length str)))
@@ -65,34 +53,55 @@
   (list (char str midpoint) (subseq str 0 midpoint) (subseq str (+ 1 midpoint))))
 
 (defun extract-highest-op (str)
-  (print str)
   (let ((split-pos (find-first-operator str)))
     (cond
      ((null split-pos) (cond
-                        ((eq (char str 0) #\() (list #\( (extract-parens-op str) "")) ; if the first character is a ( so we can extract it
-                        ((str-is-digit str) (list #\# str "")) ; returns (#\( inner-str)
+                        ((and t (eq (char str 0) #\())
+                         (list #\( (extract-parens-op str) NIL)) ; if the first character is a ( so we can extract it
+                        ((str-is-digit str) (list #\# str NIL)) ; returns (#\( inner-str)
                         (t str))) ;; empty string
      (t (extract-op str split-pos)))))
 ;; returns (operator "left string" "right string")
 
-(defun recursive-extractor (str)
+(defun gen-ast (str)
   (labels (
            (rec (root)
                 (cond
                  ((eq (first root) #\#) root)
                  (t
                   (list (first root)
-                        (rec (extract-highest-op (second root)))
-                        (rec (extract-highest-op (third root))))))))
+                        (if (second root)
+                          (rec (extract-highest-op (second root))))
+                        (if (third root)
+                          (rec (extract-highest-op (third root)))))))))
     (rec (extract-highest-op str))))
 ;; returns tree of operators '(#\operator '(left subtree) '(right subtree))
 
-(recursive-extractor "1/(1+2/2)*1*1")
+(gen-ast "1/(1+2/2)*1*1")
 
 (split-string "(1/1*1+1)")
 
-(defmacro char-is-digit (chr)
-  `(and (char<= #\0 ,chr) (char>= #\9 ,chr)))
+(gen-ast "1/(2/3*4+5)+6")
+(rebuild-eq (gen-ast "1/(2/3*4+5)+6"))
+(rebuild-eq (gen-ast "(1/1)+2/3*4+5+6"))
+(rebuild-eq (gen-ast "1/6"))
+
+(defun rebuild-eq (root)
+  (cond
+   ((null root))
+   ((eq (first root) #\#)
+    (format t "~A" (second root)))
+   ((eq (first root) #\()
+    (format t "(")
+    (rebuild-eq (second root))
+    (format t ")"))
+   (t
+    (rebuild-eq (second root))
+    (format t "~A" (first root))
+    (rebuild-eq (third root)))))
+
+(defun char-is-digit (chr)
+  (and (char<= #\0 chr) (char>= #\9 chr)))
 
 (defun str-is-digit (str)
   (reduce (lambda (acc x)
