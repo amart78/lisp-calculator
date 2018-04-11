@@ -1,4 +1,5 @@
-(setq *symbols* '(#\+ #\- #\* #\/))
+(defun is-op (chr)
+  (member chr '(#\+ #\- #\* #\/)))
 
 (defun find-first-operator (str)
   (defmacro next-char ()
@@ -8,37 +9,37 @@
   (defmacro next-char-down-level ()
     '(rec (+ 1 index) (- 1 level) strlen))
   (labels ((rec (index level strlen)
+              (let ((cur-char (char str index)))
                 (cond
                  ((eq index strlen)
                   (list 99 nil)) ; TODO make more elegant value to return
-                 ((eq (char str index) #\()
+                 ((eq cur-char #\()
                   (next-char-up-level)) ;; current char is open paren
-                 ((eq (char str index) #\))
+                 ((eq cur-char #\))
                   (next-char-down-level)) ;; current char is close paren
                  ((eq level 0)
                       (cond
-                       ((null (member (char str index) '(#\+ #\- #\* #\/)))
+                       ((not (is-op cur-char))
                         (next-char)) ;; current char is not operator
-                       ((member (char str index) '(#\+ #\-))
+                       ((member cur-char '(#\+ #\-))
                         (list 0 index)) ;; current char is an additive character terminate early (priority index)
-                       ((member (char str index) '(#\*))
+                       ((member cur-char '(#\*))
                         (let ((retval (next-char)))
                           (if (< (first retval) 1)
                               retval
                               (list 1 index))))
-                       ((member (char str index) '(#\/))
+                       ((member cur-char '(#\/))
                         (let ((retval (next-char)))
                           (if (< (first retval) 2)
                               retval
                             (list 2 index))))
-                       ((member (char str index) '(#\^))
+                       ((member cur-char '(#\^))
                         (let ((retval (next-char)))
                           (if (< (first retval) 3)
                               retval
                             (list 3 index))))
                        (t (next-char)))) ; unnecessary?
-                 ;; current char is a multiplicative character if all else fails, return this
-                 (t (next-char))))) ;; action cannot be carried out wait for higher priority function
+                 (t (next-char)))))) ;; action cannot be carried out wait for higher priority function
     (second (rec 0 0 (length str)))))
 
 (find-first-operator "1/(1+1+2)*2*2*2*2")
@@ -85,6 +86,26 @@
 (rebuild-eq (gen-ast "1/(2/3*4+5)+6"))
 (rebuild-eq (gen-ast "(1/1)+2/3*4+5+6"))
 (rebuild-eq (gen-ast "1/6"))
+(compute-bst (gen-ast "1/6+1"))
+(compute-bst (gen-ast "6/6+1"))
+(compute-bst (gen-ast "(1/1)+2/3*4+5+6"))
+
+(defun compute-bst (root)
+  (cond
+   ((eq (first root) #\#)
+    (parse-integer (second root)))
+   ((eq (first root) #\+)
+    (+ (compute-bst (second root)) (compute-bst (third root))))
+   ((eq (first root) #\-)
+    (- (compute-bst (second root)) (compute-bst (third root))))
+   ((eq (first root) #\*)
+    (* (compute-bst (second root)) (compute-bst (third root))))
+   ((eq (first root) #\/)
+    (/ (compute-bst (second root)) (compute-bst (third root))))
+   ((eq (first root) #\^)
+    (expt (compute-bst (second root)) (compute-bst (third root))))
+   ((eq (first root) #\()
+    (compute-bst (second root)))))
 
 (defun rebuild-eq (root)
   (cond
