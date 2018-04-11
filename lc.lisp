@@ -130,7 +130,7 @@
 (defun gen-n-pad (n value)
   (make-list n :initial-element value))
 
-(defun list-pad-block-length (lst)
+(defun list-pad-block-horizontal (lst)
   (let ((max-length (max-list-length (cdr lst))))
     (cons (car lst)
           (map 'list #'(lambda (x) (append x (gen-n-pad (- max-length (list-filtered-length x)) 0))) (cdr lst)))))
@@ -142,22 +142,45 @@
   (- (first B) (first A)))
 
 (defun list-vertical-prepend (A B)
+  ;; prepend A by B
+  ;; will cause the mainline to shift
   (let ((num-prepend (list-get-number-vertical-prepend A B))
         (mainline-A (car A))
         (lst-A (cdr A)))
     (if (> num-prepend 0)
-      (list-pad-block-length (cons mainline-A (append (gen-n-pad num-prepend NIL) lst-A))) ; need to prepend A
+        (cons
+         (+ mainline-A num-prepend)
+         (append (gen-n-pad num-prepend NIL) lst-A)) ; need to prepend A
       A)))
 
+(defun list-vertical-append (A B)
+  ;; must be invoked after prepend since it's relying on
+  ;; the guarantee that the remaining length difference
+  ;; is due to missing lines at the end
+  (let ((num-append (- (length B) (length A)))
+        (mainline-A (car A))
+        (lst-A (cdr A)))
+    (if (> num-append 0)
+        (cons mainline-A (append (gen-n-pad num-append NIL) lst-A)) ; need to prepend A
+      A)))
 
-(defun list-get-number-rows-append (lst-1 lst-2))
+(defun list-pad-block-vertical (A B)
+  ;; use multiple-value-bind to catch the new blocks new-A new-B
+  (let* ((pre-padded-A (list-vertical-prepend A B))
+        (pre-padded-B (list-vertical-prepend B A))
+        (new-A (list-vertical-append pre-padded-A pre-padded-B))
+        (new-B (list-vertical-append pre-padded-B pre-padded-A))
+        )
+    (values
+      (list-pad-block-horizontal new-A)
+      (list-pad-block-horizontal new-B))))
 
-(defun list-pad-blocks-height (lst-1 lst-2)
-  )
 
 (gen-n-pad 10 '())
 (list-pad-block-length '(1 (1 2) (1 2) (1 2 3 4)))
 (list-vertical-prepend '(1 (1 2) (1 2) (1 2 3 4)) '(3 (1 2) (1) (1) (1)))
+
+(list-pad-block-vertical '(1 (1 2) (1 2) (1 2 3 4)) '(3 (1 2) (1) (1) (1)))
 
 #|
 ;; testing char-is-digit
