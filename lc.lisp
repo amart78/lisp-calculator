@@ -44,7 +44,7 @@
                               retval
                             (list 0 index)))
                           ((member cur-char '(#\*))
-                          (if (< (first retval) 1)
+                          (if (<= (first retval) 1)
                               retval
                             (list 1 index)))
                           ((member cur-char '(#\/))
@@ -125,8 +125,6 @@
 (defun max-list-length (lst)
   (reduce #'(lambda (acc cur)
               (max (list-filtered-length cur) acc)) lst :initial-value 0))
-
-(max-list-length '((1 2) (2) (1) (1 2 3 4)))
 
 (defun gen-n-pad (n value)
   (make-list n :initial-element value))
@@ -226,9 +224,22 @@
                   (rec
                    (cons (append (cons prefix nil) (car lines) (cons suffix nil)) acc) (cdr lines)))
                  (t
-                  (rec
-                   (cons (append (cons #\  NIL) (car lines) (cons #\  NIL)) acc)
-                   (cdr lines))))))
+                  (let*
+                      ((prefixed-line
+                        (if (not (symbolp prefix))
+                            (append
+                             (cons #\  NIL)
+                             (car lines))
+                          (car lines)))
+                      (new-line
+                        (if (not (symbolp suffix))
+                            (append
+                             prefixed-line
+                             (cons #\  NIL))
+                          prefixed-line)))
+                    (rec
+                     (cons new-line acc)
+                     (cdr lines)))))))
     (cdr (list-pad-block-horizontal (cons NIL (rec NIL block-A))))))
 
 (defun conjoin-inline-operator (list-A operator)
@@ -249,14 +260,14 @@
       (padded-list-A padded-list-B)
       (list-pad-block-vertical list-A list-B)
     (let* ((mainline
-              (max (car padded-list-A) (car padded-list-B)))
+            (max (car padded-list-A) (car padded-list-B)))
            (left-block
-              (block-append-at-n (cdr padded-list-A) operator mainline))
+            (block-append-at-n (cdr padded-list-A) operator mainline))
            (right-block
             (cdr padded-list-B))
            (aggregate
             (cons mainline (block-mass-append left-block right-block))))
-            aggregate)))
+      aggregate)))
 
 (defun conjoin-vertical-operator (list-A list-B operator)
   ;; concatenates blocks that utilize vertical concatenation
@@ -272,8 +283,8 @@
             (cdr (list-prepad-block-horizontal list-B (cons NIL operator-bot-block))))
            (bot-block
             (cdr (list-pad-block-horizontal (cons NIL operator-bot-block) (cons NIL top-block))))
-            (aggregate
-             (cons mainline (append top-block bot-block))))
+           (aggregate
+            (cons mainline (append top-block bot-block))))
       aggregate))
    (t
     (let
@@ -286,17 +297,17 @@
              (bot-block
               (cdr padded-list-B))
              (aggregate
-              (cons mainline (append top-block bot-block))))
+              (list-pad-block-horizontal (cons mainline (append top-block bot-block)))))
         aggregate)))))
 
 (defun flavor-format-lst (lst)
   (map 'list #'(lambda (x)
-               (cond
-                ((eq x 'U)
-                  (format NIL "~c[4m" #\ESC))
-                ((eq x 'N)
-                 (format NIL "~c[0m" #\ESC))
-                (t x)))
+                 (cond
+                  ((eq x 'U)
+                   (format NIL "~c[4m" #\ESC))
+                  ((eq x 'N)
+                   (format NIL "~c[0m" #\ESC))
+                  (t x)))
        lst))
 
 (defun print-format-lst (fn-block)
@@ -318,20 +329,28 @@
     (list 0 (string-to-list (second root))))
    ((member (first root) '(#\+ #\- #\*))
     (conjoin-horizontal-operator
-      (gen-2d-lst (second root))
-      (gen-2d-lst (third root))
-      (first root)))
+     (gen-2d-lst (second root))
+     (gen-2d-lst (third root))
+     (first root)))
    ((member (first root) '(#\/ #\^))
     (conjoin-vertical-operator
      (gen-2d-lst (second root))
      (gen-2d-lst (third root))
      (first root)))
-  ((member (first root) '(#\()) ; TODO
+   ((member (first root) '(#\()) ; TODO
     (conjoin-inline-operator
-      (gen-2d-lst (second root))
-      (first root)))))
+     (gen-2d-lst (second root))
+     (first root)))))
 
 (defun main ()
   (soln-ast (read-line))
   (main))
 (main)
+(soln-ast "1/2/2/2/2/2/2")
+(soln-ast "1+2/2/2/2")
+
+
+(let ((a '(0 (U #\1 N) (#\2)) )
+      (b '(0 (#\2)))
+      (c '((#\Space U #\1 N #\Space) (U #\2 N #\Space #\Space) (#\2 #\Space #\Space))))
+  (print (conjoin-vertical-operator b a #\/)))
