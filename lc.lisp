@@ -275,9 +275,6 @@
             (cdr (list-pad-block-horizontal (cons NIL operator-bot-block) (cons NIL top-block))))
             (aggregate
              (cons mainline (append top-block bot-block))))
-      ;(print list-A)
-      ;(print list-B)
-      (print aggregate)
       aggregate))
    (t
     (let
@@ -308,8 +305,10 @@
 (defun flavor-format-lst (lst)
   (map 'list #'(lambda (x)
                (cond
-                ((eq x 'U) "")
-                ((eq x 'N) "")
+                ((eq x 'U)
+                  (format NIL "~c[4m" #\ESC))
+                ((eq x 'N)
+                 (format NIL "~c[0m" #\ESC))
                 (t x)))
        lst))
 
@@ -335,9 +334,8 @@
      (gen-2d-lst (third root))
      (first root)))
   ((member (first root) '(#\()) ; TODO
-   (print root)
     (conjoin-inline-operator
       (gen-2d-lst (second root))
       (first root)))))
 
-(print-format-lst (gen-2d-lst (gen-ast "1+2*(3/(2/2))")))
+(print-format-lst (gen-2d-lst (gen-ast "1+2*(3/(2/2^(2+1/2)))")))
