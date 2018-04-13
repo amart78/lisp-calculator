@@ -1,9 +1,11 @@
+;; entries ((symbol) associativity argc priority function)
 (defparameter *op-families*
-  '((((#\+) left #'+))
-    (((#\-) left #'-))
-    (((#\*) left #'*))
-    (((#\/) left #'/))
-    (((#\^) right #'expt))))
+  '((((#\+) left 2 0 #'+))
+    (((#\-) left 2 1 #'-))
+    (((#\*) left 2 2 #'*))
+    (((#\/) left 2 3 #'/))
+    (((#\-) right 1 4 #'-))
+    (((#\^) right 2 5 #'expt))))
 
 (defun char-is-digit (chr)
   (and (char<= #\0 chr) (char>= #\9 chr)))
@@ -24,11 +26,8 @@
                  (t (rec (cdr lst) (+ n 1))))))
     (rec lst 0)))
 
-(defun get-priority (sym)
+(defun is-op (sym)
   (find-first-index *op-families* sym))
-
-(defun is-op (chr)
-  (get-priority chr))
 
 (defun extract-highest-op (str)
   ;; returns (operator "left string" "right string")
@@ -48,18 +47,29 @@
                           (t str))) ;; empty string
       (t (extract-op str split-pos)))))
 
-(defmacro gen-rule (rule)
-  (destructuring-bind ((symbol) associativity function) rule :ignore function
+(defun detected-unary-operator (str index)
+  (or (eq index 0) (is-op (char str (- index 1)))))
+
+(defun detected-binary-operator (str index)
+  (not (detected-unary-operator str index)))
+
+(defmacro gen-cond-rule (rule)
+  (destructuring-bind ((symbol) associativity argc priority function) rule :ignore function
     (let ((comparator
            (if (eq associativity 'left)
-              '<= ; causes the leftmost recursive solution to override an equivalent solution
-             '<)); causes the rightmost recursive solution to override an equivalent solution
-          (priority (get-priority symbol)))
-      `((eq cur-char ,symbol)
-        (if (,comparator (first retval) ,priority)
-            retval
-          (list ,priority index))))))
+              '> ; causes the leftmost recursive solution to override an equivalent solution
+              '>=)); causes the rightmost recursive solution to override an equivalent solution
+          (arg-type
+           (if (eq argc 1)
+               '(detected-unary-operator str index)
+               '(detected-binary-operator str index))))
+        `((and
+              (eq cur-char ,symbol) ; is this a matching symbol
+              (,@arg-type) ; does this have the right number of arguments
+              (,comparator (first retval) ,priority)) ; does this have 
+              (list ,priority index)))))
 
+(macroexpand `(aggregated-rules))
 #|
 evaluation order information
 left to right priority tie-breaking <=
@@ -70,7 +80,7 @@ recursion unrolls and if there's a tie, then the later operator gets returned
 
 (defmacro aggregated-rules ()
   (let ((rules (map 'list
-          #'(lambda (x) (macroexpand `(gen-rule ,x)))
+          #'(lambda (x) (macroexpand `(gen-cond-rule ,x)))
           (apply #'append *op-families*))))
     `(let ((retval (next-char)))
       (cond
@@ -114,7 +124,6 @@ recursion unrolls and if there's a tie, then the later operator gets returned
                     (if (third root)
                       (rec (extract-highest-op (third root)))))))))
     (rec (extract-highest-op str))))
-(gen-ast "1+-1")
 
 
 (defun compute-ast (root)
