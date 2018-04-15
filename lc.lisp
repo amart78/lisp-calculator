@@ -11,9 +11,7 @@
   (and (char<= #\0 chr) (char>= #\9 chr)))
 
 (defun str-is-digit (str)
-  (reduce (lambda (acc x)
-            (and acc (char-is-digit x)))
-          str :initial-value t))
+  (not (find-if (lambda (x) (not (char-is-digit x))) str)))
 
 (defun find-first-index (lst k)
   (labels ((rec (lst n)
@@ -22,7 +20,8 @@
                   ((eq (car lst) k) n)
                   ((and
                      (listp (car lst))
-                     (find-first-index (car lst) k)) n)
+                     (find-first-index (car lst) k))
+                      n)
                   (t (rec (cdr lst) (+ n 1))))))
     (rec lst 0)))
 
@@ -77,25 +76,24 @@
               (let ((cur-char (char str index)))
                 (cond
                   ((eq cur-char #\()
-                  (next-char-up-level)) ;; current char is open paren
+                    (next-char-up-level)) ;; current char is open paren
                   ((eq cur-char #\))
-                  (next-char-down-level)) ;; current char is close paren
+                    (next-char-down-level)) ;; current char is close paren
                   ((eq level 0)
-                  (aggregated-rules)) ; some illegal character
+                    (aggregated-rules)) ; some illegal character
                   (t (next-char))))))) ;; action cannot be carried out wait for higher priority function
       (second (rec 0 0 (length str))))))
 
 (defun gen-ast (str)
   (labels ((rec (root)
-                ;; returns tree of operators '(#\operator '(left subtree) '(right subtree))
-                (cond
-                  ((eq (first root) #\#) root)
-                  (t
-                    (list (first root)
-                          (if (second root)
-                            (rec (extract-highest-op (second root))))
-                          (if (third root)
-                            (rec (extract-highest-op (third root)))))))))
+    (destructuring-bind (op arg1 arg2) root
+      ;; returns tree of operators '(#\operator '(left subtree) '(right subtree))
+      (case op
+        (#\# root)
+        (otherwise
+          (list op
+            (if arg1 (rec (extract-highest-op arg1)))
+            (if arg2 (rec (extract-highest-op arg2)))))))))
     (rec (extract-highest-op str))))
 
 (defun extract-highest-op (str)
@@ -131,18 +129,19 @@
       ( #\( (compute-ast arg1)))))
 
 (defun rebuild-eq (root)
-  (cond
-    ((null root))
-    ((eq (first root) #\#)
-     (format t "~A" (second root)))
-    ((eq (first root) #\()
-     (format t "(")
-     (rebuild-eq (second root))
-     (format t ")"))
-    (t
-      (rebuild-eq (second root))
-      (format t "~A" (first root))
-      (rebuild-eq (third root)))))
+  (destructuring-bind (op arg1 arg2) root
+    (cond
+      ((null root))
+      ((eq op #\#)
+        (format t "~A" arg1))
+      ((eq op #\()
+        (format t "(")
+      (rebuild-eq arg1)
+        (format t ")"))
+      (t
+        (rebuild-eq arg1)
+        (format t "~A" op)
+        (rebuild-eq arg2)))))
 
 ;; conversion process
 ;; our convention will be (mainline-level (line) (line) (line))
@@ -237,26 +236,11 @@
   (map 'list #'append block-A block-B))
 
 (defun block-append-at-n (block-A operator n)
-  (labels ((
-            rec (acc x)
-            (cond
-              ((null x) (reverse acc))
-              ((eq n (length acc))
-               (rec
-                 (cons (append (car x) (cons operator nil)) acc) ; append the operator to the end of the accumulator list
-                 (cdr x)))
-              (t (rec (cons (car x) acc) (cdr x))))))
-    (list-to-block
-      (list-pad-block-horizontal
-        (block-to-list
-          (rec NIL block-A))))))
-
-(defun block-append-at-n (block-A operator n)
   (block-surround-at-n block-A n NIL operator))
 
 (defun block-surround-at-n (block-A n &optional (prefix NIL) (suffix NIL))
   (labels ((
-            rec (acc lines)
+            surround-line (acc lines)
             (cond
               ((null lines) (reverse acc))
               ((eq n (length acc))
@@ -269,7 +253,7 @@
                       (if suffix ; catch if the symbol is a symbol for highlighting
                           (append prefixed-line (cons suffix NIL))
                           prefixed-line)))
-                  (rec
+                  (surround-line
                     (cons new-line acc)
                     (cdr lines))))
               (t
@@ -282,10 +266,10 @@
                         (if (and suffix (not (symbolp suffix))) ; catch if the symbol is a symbol for highlighting
                             (append prefixed-line (cons #\  NIL))
                             prefixed-line)))
-                    (rec
+                    (surround-line
                       (cons new-line acc)
                         (cdr lines)))))))
-    (list-to-block (list-pad-block-horizontal (block-to-list (rec NIL block-A))))))
+    (list-to-block (list-pad-block-horizontal (block-to-list (surround-line NIL block-A))))))
 
 (defun conjoin-inline-operator (list-A operator) :ignore operator
   ;; concatenates blocks that use inlined operators
