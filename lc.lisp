@@ -51,14 +51,6 @@
           (,comparator (first retval) ,priority)) ; does this have 
         (list ,priority index)))))
 
-#|
-evaluation order information
-left to right priority tie-breaking <=
-recursion unrolls and the earlier equally weighted operator gets returned
-right to left priority tie-breaking <
-recursion unrolls and if there's a tie, then the later operator gets returned
-|#
-
 (defmacro aggregated-rules ()
   (let ((rules 
           (map 'list
@@ -71,28 +63,27 @@ recursion unrolls and if there's a tie, then the later operator gets returned
          ,@rules
          (t retval)))))
 
-(defmacro next-char ()
-  '(rec (+ 1 index) level strlen))
-(defmacro next-char-up-level ()
-  '(rec (+ 1 index) (+ 1 level) strlen))
-(defmacro next-char-down-level ()
-  '(rec (+ 1 index) (- 1 level) strlen))
-
 (defun find-first-operator (str)
-  (labels
-    ((rec (index level strlen)
-          (if (eq index strlen)
-            (list most-positive-fixnum nil)
-            (let ((cur-char (char str index)))
-              (cond
-                ((eq cur-char #\()
-                 (next-char-up-level)) ;; current char is open paren
-                ((eq cur-char #\))
-                 (next-char-down-level)) ;; current char is close paren
-                ((eq level 0)
-                 (aggregated-rules)) ; some illegal character
-                (t (next-char))))))) ;; action cannot be carried out wait for higher priority function
-    (second (rec 0 0 (length str)))))
+  (macrolet ((next-char ()
+    '(rec (+ 1 index) level strlen))
+  (next-char-up-level ()
+    '(rec (+ 1 index) (+ 1 level) strlen))
+  (next-char-down-level ()
+    '(rec (+ 1 index) (- 1 level) strlen)))
+    (labels
+      ((rec (index level strlen)
+            (if (eq index strlen)
+              (list most-positive-fixnum nil)
+              (let ((cur-char (char str index)))
+                (cond
+                  ((eq cur-char #\()
+                  (next-char-up-level)) ;; current char is open paren
+                  ((eq cur-char #\))
+                  (next-char-down-level)) ;; current char is close paren
+                  ((eq level 0)
+                  (aggregated-rules)) ; some illegal character
+                  (t (next-char))))))) ;; action cannot be carried out wait for higher priority function
+      (second (rec 0 0 (length str))))))
 
 (defun gen-ast (str)
   (labels ((rec (root)
@@ -127,23 +118,17 @@ recursion unrolls and if there's a tie, then the later operator gets returned
 
 
 (defun compute-ast (root)
-  (cond
-    ((eq (first root) #\#)
-     (if (string= (second root) "")
-       0
-       (parse-integer (second root))))
-    ((eq (first root) #\+)
-     (+ (compute-ast (second root)) (compute-ast (third root))))
-    ((eq (first root) #\-)
-     (- (compute-ast (second root)) (compute-ast (third root))))
-    ((eq (first root) #\*)
-     (* (compute-ast (second root)) (compute-ast (third root))))
-    ((eq (first root) #\/)
-     (/ (compute-ast (second root)) (compute-ast (third root))))
-    ((eq (first root) #\^)
-     (expt (compute-ast (second root)) (compute-ast (third root))))
-    ((eq (first root) #\()
-     (compute-ast (second root)))))
+  (destructuring-bind (op arg1 arg2) root
+    (case op
+      (#\# (if (string= arg1 "")
+               0
+               (parse-integer arg1)))
+      ( #\+ (+ (compute-ast arg1) (compute-ast arg2)))
+      ( #\- (- (compute-ast arg1) (compute-ast arg2)))
+      ( #\* (* (compute-ast arg1) (compute-ast arg2)))
+      ( #\/ (/ (compute-ast arg1) (compute-ast arg2)))
+      ( #\^ (expt (compute-ast arg1) (compute-ast arg2)))
+      ( #\( (compute-ast arg1)))))
 
 (defun rebuild-eq (root)
   (cond
@@ -266,30 +251,40 @@ recursion unrolls and if there's a tie, then the later operator gets returned
         (block-to-list
           (rec NIL block-A))))))
 
+(defun block-append-at-n (block-A operator n)
+  (block-surround-at-n block-A n NIL operator))
+
 (defun block-surround-at-n (block-A n &optional (prefix NIL) (suffix NIL))
   (labels ((
             rec (acc lines)
             (cond
               ((null lines) (reverse acc))
               ((eq n (length acc))
-               (rec
-                 (cons (append (cons prefix nil) (car lines) (cons suffix nil)) acc) (cdr lines)))
-              (t
-                (let* ((prefixed-line
-                     (if (and prefix (not (symbolp prefix))) ; catch if the symbol is a symbol for highlighting
-                       (append
-                         (cons #\  NIL)
-                         (car lines))
-                       (car lines)))
-                   (new-line
-                     (if (and suffix (not (symbolp suffix))) ; catch if the symbol is a symbol for highlighting
-                       (append
-                         prefixed-line
-                         (cons #\  NIL))
-                       prefixed-line)))
+               (let*
+                   ((prefixed-line
+                      (if prefix ; catch if the symbol is a symbol for highlighting
+                          (append (cons prefix NIL) (car lines))
+                          (car lines)))
+                    (new-line
+                      (if suffix ; catch if the symbol is a symbol for highlighting
+                          (append prefixed-line (cons suffix NIL))
+                          prefixed-line)))
                   (rec
                     (cons new-line acc)
-                    (cdr lines)))))))
+                    (cdr lines))))
+              (t
+               (let*
+                   ((prefixed-line
+                        (if (and prefix (not (symbolp prefix))) ; catch if the symbol is a symbol for highlighting
+                            (append (cons #\  NIL) (car lines))
+                            (car lines)))
+                      (new-line
+                        (if (and suffix (not (symbolp suffix))) ; catch if the symbol is a symbol for highlighting
+                            (append prefixed-line (cons #\  NIL))
+                            prefixed-line)))
+                    (rec
+                      (cons new-line acc)
+                        (cdr lines)))))))
     (list-to-block (list-pad-block-horizontal (block-to-list (rec NIL block-A))))))
 
 (defun conjoin-inline-operator (list-A operator) :ignore operator
@@ -330,9 +325,9 @@ recursion unrolls and if there's a tie, then the later operator gets returned
             (operator-bot-block
               (block-append-at-n (list-to-block list-A) operator (car list-A)))
             (top-block
-              (list-to-block (list-prepad-block-horizontal list-B (cons NIL operator-bot-block))))
+              (list-to-block (list-prepad-block-horizontal list-B (block-to-list operator-bot-block))))
             (bot-block
-              (list-to-block (list-pad-block-horizontal (cons NIL operator-bot-block) (cons NIL top-block))))
+              (list-to-block (list-pad-block-horizontal (block-to-list operator-bot-block) (block-to-list top-block))))
             (aggregate
               (cons mainline (append top-block bot-block))))
        aggregate))
@@ -352,13 +347,10 @@ recursion unrolls and if there's a tie, then the later operator gets returned
 
 (defun flavor-format-lst (lst)
   (map 'list #'(lambda (x)
-                 (cond
-                   ((eq x 'U)
-                    (format NIL "~c[4m" #\ESC))
-                   ((eq x 'N)
-                    (format NIL "~c[0m" #\ESC))
-                   (t x)))
-       lst))
+                 (case x
+                   (U (format NIL "~c[4m" #\ESC))
+                   (N (format NIL "~c[0m" #\ESC))
+                   (otherwise x))) lst))
 
 (defun print-format-lst (fn-block)
   (format t "~%")
@@ -375,23 +367,15 @@ recursion unrolls and if there's a tie, then the later operator gets returned
     (print-format-lst full-soln)))
 
 (defun gen-2d-lst (root)
-  (cond
-    ((eq (first root) #\#)
-     (list 0 (string-to-list (second root))))
-    ((member (first root) '(#\+ #\- #\*))
-     (conjoin-horizontal-operator
-       (gen-2d-lst (second root))
-       (gen-2d-lst (third root))
-       (first root)))
-    ((member (first root) '(#\/ #\^))
-     (conjoin-vertical-operator
-       (gen-2d-lst (second root))
-       (gen-2d-lst (third root))
-       (first root)))
-    ((member (first root) '(#\()) ; TODO
-     (conjoin-inline-operator
-       (gen-2d-lst (second root))
-       (first root)))))
+  (destructuring-bind (op arg1 arg2) root
+    (case op
+      (#\#
+        (list 0 (string-to-list (second root))))
+      ((#\+ #\- #\*)
+        (conjoin-horizontal-operator (gen-2d-lst arg1) (gen-2d-lst arg2) op))
+      ((#\/ #\^)
+        (conjoin-vertical-operator (gen-2d-lst arg1) (gen-2d-lst arg2) op))
+      ((#\() (conjoin-inline-operator (gen-2d-lst arg1) op)))))
 
 (defun main ()
   (soln-ast (read-line))
