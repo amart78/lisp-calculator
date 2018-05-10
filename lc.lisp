@@ -1,3 +1,4 @@
+#!/usr/bin/clisp
 ;; entries ((symbol) associativity argc priority function)
 (defparameter *op-families*
   '((((#\+) left 2 0 #'+))
@@ -8,7 +9,7 @@
     (((#\^) right 2 5 #'expt))))
 
 (defun char-is-digit (chr)
-  (and (char<= #\0 chr) (char>= #\9 chr)))
+  (not (is-op chr)))
 
 (defun str-is-digit (str)
   (not (find-if (lambda (x) (not (char-is-digit x))) str)))
@@ -114,13 +115,24 @@
                           (t str))) ;; empty string
       (t (extract-op str split-pos)))))
 
+(defun parse-value (str)
+   (if (position #\. str)
+      (multiple-value-bind (new-str magnitude)
+         (let ((split-pos (position #\. str)))
+            (values
+              (format nil "~A~A"
+                      (subseq str 0 split-pos)
+                      (subseq str (+ 1 split-pos)))
+              (- (length str) (+ split-pos 1))))
+         (float (/ (parse-integer new-str) (expt 10 magnitude))))
+      (parse-integer str)))
 
 (defun compute-ast (root)
   (destructuring-bind (op arg1 arg2) root
     (case op
       (#\# (if (string= arg1 "")
                0
-               (parse-integer arg1)))
+               (parse-value arg1)))
       ( #\+ (+ (compute-ast arg1) (compute-ast arg2)))
       ( #\- (- (compute-ast arg1) (compute-ast arg2)))
       ( #\* (* (compute-ast arg1) (compute-ast arg2)))
