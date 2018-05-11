@@ -4,6 +4,7 @@
   '((((#\+) left 2 0 #'+))
     (((#\-) left 2 1 #'-))
     (((#\*) left 2 2 #'*))
+    (((#\%) left 2 3 #'mod))
     (((#\/) left 2 3 #'/))
     (((#\-) right 1 4 #'-))
     (((#\^) right 2 5 #'expt))))
@@ -136,6 +137,7 @@
       ( #\+ (+ (compute-ast arg1) (compute-ast arg2)))
       ( #\- (- (compute-ast arg1) (compute-ast arg2)))
       ( #\* (* (compute-ast arg1) (compute-ast arg2)))
+      ( #\% (mod (compute-ast arg1) (compute-ast arg2)))
       ( #\/ (/ (compute-ast arg1) (compute-ast arg2)))
       ( #\^ (expt (compute-ast arg1) (compute-ast arg2)))
       ( #\( (compute-ast arg1)))))
@@ -367,7 +369,7 @@
     (case op
       (#\#
         (list 0 (string-to-list (second root))))
-      ((#\+ #\- #\*)
+      ((#\+ #\- #\* #\%)
         (conjoin-horizontal-operator (gen-2d-lst arg1) (gen-2d-lst arg2) op))
       ((#\/ #\^)
         (conjoin-vertical-operator (gen-2d-lst arg1) (gen-2d-lst arg2) op))
