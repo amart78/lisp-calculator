@@ -7,7 +7,8 @@
     (((#\%) left 2 3 #'mod))
     (((#\/) left 2 3 #'/))
     (((#\-) right 1 4 #'-))
-    (((#\^) right 2 5 #'expt))))
+    (((#\^) right 2 5 #'expt))
+    (((#\() left 1 6 #'apply))))
 
 (defun char-is-digit (chr)
   (not (is-op chr)))
@@ -100,12 +101,11 @@
 
 (defun extract-highest-op (str)
   ;; returns (operator "left string" "right string")
-  (defun extract-parens-op (str)
+  (labels (
+  (extract-parens-op (str)
     (subseq str 1 (- (length str) 1 )))
-  (defun split-string (str midpoint)
-    (subseq str midpoint) (subseq str midpoint (length str)))
-  (defun extract-op (str midpoint)
-    (list (char str midpoint) (subseq str 0 midpoint) (subseq str (+ 1 midpoint))))
+  (extract-op (str midpoint)
+    (list (char str midpoint) (subseq str 0 midpoint) (subseq str (+ 1 midpoint)))))
   (let ((split-pos (find-first-operator str)))
     (cond
       ((null split-pos) (cond
@@ -114,9 +114,10 @@
                           ((and t (eq (char str 0) #\())
                            (list #\( (extract-parens-op str) NIL)) ; if the first character is a ( so we can extract it
                           (t str))) ;; empty string
-      (t (extract-op str split-pos)))))
+      (t (extract-op str split-pos))))))
 
 (defun parse-value (str)
+  ;; parses strings(decimal or not) into values
    (if (position #\. str)
       (multiple-value-bind (new-str magnitude)
          (let ((split-pos (position #\. str)))
@@ -128,19 +129,29 @@
          (float (/ (parse-integer new-str) (expt 10 magnitude))))
       (parse-integer str)))
 
-(defun compute-ast (root)
-  (destructuring-bind (op arg1 arg2) root
-    (case op
+(defmacro aggregated-eval ()
+  ;; takes all of the operators and puts them into a list to be matched with
+  ;; the current operator symbol and uses the given evaluation rule
+  (let ((rules 
+          (map 'list
+               #'(lambda (x) (macroexpand `(gen-eval-rule ,x)))
+               (apply #'append *op-families*))))
+    `(case op
       (#\# (if (string= arg1 "")
                0
                (parse-value arg1)))
-      ( #\+ (+ (compute-ast arg1) (compute-ast arg2)))
-      ( #\- (- (compute-ast arg1) (compute-ast arg2)))
-      ( #\* (* (compute-ast arg1) (compute-ast arg2)))
-      ( #\% (mod (compute-ast arg1) (compute-ast arg2)))
-      ( #\/ (/ (compute-ast arg1) (compute-ast arg2)))
-      ( #\^ (expt (compute-ast arg1) (compute-ast arg2)))
-      ( #\( (compute-ast arg1)))))
+      ,@rules)))
+
+(defmacro gen-eval-rule (rule)
+  ;; generates the matching condition for an operation to be applied
+  (destructuring-bind ((sym) associativity argc priority func) rule :ignore func
+    (case argc
+      (1 `(,sym (compute-ast arg1)))
+      (2 `(,sym (funcall ,func (compute-ast arg1) (compute-ast arg2)))))))
+
+(defun compute-ast (root)
+  (destructuring-bind (op arg1 arg2) root
+      (aggregated-eval)))
 
 (defun rebuild-eq (root)
   (destructuring-bind (op arg1 arg2) root
@@ -351,11 +362,10 @@
                    (otherwise x))) lst))
 
 (defun print-format-lst (fn-block)
-  (format t "~%")
   (map 'list #'(lambda (x)
                  (format t "~A~%" (list-to-string (flavor-format-lst x))))
        fn-block)
-  NIL)
+  (format t "~%"))
 
 (defun soln-ast (equation)
   (let* ((ast (gen-ast equation))
