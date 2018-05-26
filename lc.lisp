@@ -270,30 +270,30 @@
               ((null lines) (reverse acc))
               ((eq n (length acc))
                (let*
-                   ((prefixed-line
-                      (if prefix ; catch if the symbol is a symbol for highlighting
-                          (append (cons prefix NIL) (car lines))
-                          (car lines)))
-                    (new-line
-                      (if suffix ; catch if the symbol is a symbol for highlighting
-                          (append prefixed-line (cons suffix NIL))
-                          prefixed-line)))
+                 ((prefixed-line
+                    (if prefix ; catch if the symbol is a symbol for highlighting
+                      (append (cons prefix NIL) (car lines))
+                      (car lines)))
+                  (new-line
+                    (if suffix ; catch if the symbol is a symbol for highlighting
+                      (append prefixed-line (cons suffix NIL))
+                      prefixed-line)))
+                 (surround-line
+                   (cons new-line acc)
+                   (cdr lines))))
+              (t
+                (let*
+                  ((prefixed-line
+                     (if (and prefix (not (symbolp prefix))) ; catch if the symbol is a symbol for highlighting
+                       (append (cons #\  NIL) (car lines))
+                       (car lines)))
+                   (new-line
+                     (if (and suffix (not (symbolp suffix))) ; catch if the symbol is a symbol for highlighting
+                       (append prefixed-line (cons #\  NIL))
+                       prefixed-line)))
                   (surround-line
                     (cons new-line acc)
-                    (cdr lines))))
-              (t
-               (let*
-                   ((prefixed-line
-                        (if (and prefix (not (symbolp prefix))) ; catch if the symbol is a symbol for highlighting
-                            (append (cons #\  NIL) (car lines))
-                            (car lines)))
-                      (new-line
-                        (if (and suffix (not (symbolp suffix))) ; catch if the symbol is a symbol for highlighting
-                            (append prefixed-line (cons #\  NIL))
-                            prefixed-line)))
-                    (surround-line
-                      (cons new-line acc)
-                        (cdr lines)))))))
+                    (cdr lines)))))))
     (list-to-block (list-pad-block-horizontal (block-to-list (surround-line NIL block-A))))))
 
 (defun conjoin-inline-operator (list-A operator) :ignore operator
@@ -364,28 +364,33 @@
 (defun print-format-lst (fn-block)
   (map 'list #'(lambda (x)
                  (format t "~A~%" (list-to-string (flavor-format-lst x))))
-       fn-block)
-  (format t "~%"))
+       fn-block))
 
 (defun soln-ast (equation)
   (let* ((ast (gen-ast equation))
          (lst (gen-2d-lst ast))
          (result (compute-ast ast))
-         (full-soln (block-append-at-n (list-to-block lst) (format NIL " = ~A [~A]" (float result) result) (car lst))))
-    (print-format-lst full-soln)))
+         (result-string (format NIL " = ~A [~A]" (float result) result))
+         (output-length (+ (length result-string) (length (nth (car lst) (list-to-block lst)))))
+         (full-soln 
+           (block-append-at-n (list-to-block lst) result-string (car lst))))
+    (format t "~v@{~A~:*~}~%~%" output-length "_")
+    (print-format-lst full-soln)
+    (format t "~v@{~A~:*~}~%" output-length "_")))
 
 (defun gen-2d-lst (root)
   (destructuring-bind (op arg1 arg2) root
     (case op
       (#\#
-        (list 0 (string-to-list (second root))))
+       (list 0 (string-to-list (second root))))
       ((#\+ #\- #\* #\%)
-        (conjoin-horizontal-operator (gen-2d-lst arg1) (gen-2d-lst arg2) op))
+       (conjoin-horizontal-operator (gen-2d-lst arg1) (gen-2d-lst arg2) op))
       ((#\/ #\^)
-        (conjoin-vertical-operator (gen-2d-lst arg1) (gen-2d-lst arg2) op))
+       (conjoin-vertical-operator (gen-2d-lst arg1) (gen-2d-lst arg2) op))
       ((#\() (conjoin-inline-operator (gen-2d-lst arg1) op)))))
 
 (defun main ()
+  (format t "lc> ")
   (soln-ast (read-line))
   (main))
 (main)
