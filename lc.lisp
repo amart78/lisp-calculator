@@ -371,7 +371,7 @@
          (lst (gen-2d-lst ast))
          (result (compute-ast ast))
          (result-string (format NIL " = ~A [~A]" (float result) result))
-         (output-length (+ (length result-string) (length (nth (car lst) (list-to-block lst)))))
+         (output-length (+ (length result-string) (list-filtered-length (nth (car lst) (list-to-block lst)))))
          (full-soln 
            (block-append-at-n (list-to-block lst) result-string (car lst))))
     (format t "~v@{~A~:*~}~%~%" output-length "_")
