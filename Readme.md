@@ -1,4 +1,4 @@
-# Lisp Calculator (lc)
+# Lisp Calculator
 
 I normally live in shell so when I want to do math, I'm fairly limited
 in my ability to understand the semantic meaning of a line of numbers 
