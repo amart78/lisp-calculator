@@ -1,5 +1,5 @@
 #!/usr/bin/clisp
-;; entries ((symbol) associativity argc priority function)
+;;  entries ((symbol) associativity argc priority function)
 (defparameter *op-families*
   '((((#\+) left 2 0 #'+))
     (((#\-) left 2 1 #'-))
